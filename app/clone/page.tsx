@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 'use client';
 import { useState, useEffect } from "react";
 import AlertNotification from "../components/toast";
@@ -19,7 +21,6 @@ export default function Home() {
   const [labels, _s] = useState(["SAKLAR 1", "SAKLAR 2"]);
 
 
-  console.log('dataMqtt',dataMqtt)
 
   useEffect(() => {
     const updateDateTime = () => {

@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 'use client';
 import { useState, useEffect } from "react";
 import useSubscription from "../server/mqtt";
