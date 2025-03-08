@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 import { useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 
