@@ -6,14 +6,18 @@ import Gauge from "./components/gauge";
 import Grafik from "./components/grafik";
 import useSubscription from "./server/mqtt";
 import AlertNotification from "./components/toast";
-import { postSwitchPower, postValueSwitchPower } from "./server/switch.service";
+import { getHistoricalData, postValueSwitchPower } from "./server/switch.service";
 import AlertDangerNotification from "./components/toast-danger";
+import mqtt from "mqtt";
+
+const MQTT_BROKER = "ws://165.154.208.223:8083/mqtt"; // Change to your MQTT broker's WebSocket URL
+const MQTT_TOPIC1 = "esp32/relay1";
+const MQTT_TOPIC2 = "esp32/relay2";
 
 export default function Home() {
   const [dateTime, setDateTime] = useState("");
   const [theme, setTheme] = useState("light");
-  const [isOn, setIsOn] = useState(false);
-  const [isOn2, setIsOn2] = useState(false);
+
   const [labels, _s] = useState(["SAKLAR 1", "SAKLAR 2"]);
   const [alert, setAlert] = useState<any>(null);
   const [alertDanger, setAlertDanger] = useState<any>(null);
@@ -21,13 +25,59 @@ export default function Home() {
   const dataMqtt: any = useSubscription({ topic: "/realtime" });
   const [selectEdit, setSelectEdit] = useState({ index: 0, status: true })
   const [valStd, setValStd] = useState(null)
-  const [selected, setSelected] = useState("Daily");
-  const options = ["Daily", "Weekly", "Monthly", "Yearly"];
+  const [selected, setSelected] = useState("daily");
+  const options = ["daily", "weekly", "monthly"];
+  const [relay1, setRelay1] = useState(false);
+  const [relay2, setRelay2] = useState(false);
+
+  const [isOn, setIsOn] = useState(false);
+  const [isOn2, setIsOn2] = useState(false);
+
+  const client = mqtt.connect(MQTT_BROKER);
+  
+  client.on("connect", () => {
+    console.log("Connected to MQTT broker");
+  });
 
 
-  console.log('dataMqtt', dataMqtt?.message)
 
-  // console.log('valStd', valStd)
+  const toggleRelay = (relay: number) => {
+    const topic = relay === 1 ? MQTT_TOPIC1 : MQTT_TOPIC2;
+    const newState = relay === 1 ? !relay1 : !relay2;
+    client.publish(topic, newState ? "ON" : "OFF");
+    if (relay === 1) setRelay1(newState);
+    else setRelay2(newState);
+  };
+
+
+  useEffect(() => {
+    if (!!dataMqtt?.message?.md_electric) {
+      setIsOn(dataMqtt.message?.md_electric[0]?.cond_sensor);
+      setIsOn2(dataMqtt.message?.md_electric[1]?.cond_sensor);
+    }
+  }, []); // Fix dependency array
+
+
+  const [data, setData] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+        try {
+            const result = await getHistoricalData(selected);
+            setData(result);
+        } catch (err) {
+            setError("Failed to fetch data");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    fetchData();
+}, [selected]);
+
+
   useEffect(() => {
     const updateDateTime = () => {
       const now = new Date();
@@ -49,31 +99,8 @@ export default function Home() {
 
   const toggleTheme = () => setTheme(theme === "light" ? "dark" : "light");
 
-  const toggleSwitch = () => {
-    const sts = dataMqtt?.message?.md_electric?.[0]?.id
-    setIsOn(!isOn);
-    try {
-      postSwitchPower("sensor_1", !isOn, sts);
-    } catch (error) {
-      console.log(error)
-    } finally {
-      setAlert({ message: `Saklar 1 aktif`, type: "success" });
-      setTimeout(() => setAlert(null), 3000);
-    }
-  };
+ 
 
-  const toggleSwitch2 = () => {
-    const sts = dataMqtt?.message?.md_electric?.[1]?.id
-    setIsOn2(!isOn2);
-    try {
-      postSwitchPower("sensor_2", !isOn2, sts);
-    } catch (error) {
-      console.log(error)
-    } finally {
-      setAlert({ message: `Saklar 2 aktif`, type: "success" });
-      setTimeout(() => setAlert(null), 3000);
-    }
-  };
 
   const handleEdit = (idx: number, status: boolean) => {
     setSelectEdit({ index: idx, status: status })
@@ -100,7 +127,7 @@ export default function Home() {
   }, [dataMqtt?.message?.alert_notif]); // Use specific value to reduce re-renders
 
   const triggerAlert = () => {
-    setAlertDanger({ message: "Power Maximum Value, Please Down Electricity", type: "error" });
+    setAlertDanger({ message: "WARNING DAYA MELEBIHI BATAS, MOHON MATIKAN SAKLAR", type: "error" });
     setTimeout(() => setAlertDanger(null), 10000); // Uncomment if you want auto-dismiss
   };
 
@@ -163,13 +190,11 @@ export default function Home() {
                   <span className="font-bold text-lg dark:text-white">{label}</span>
 
                   <button
-                    onClick={idx === 0 ? toggleSwitch : toggleSwitch2}
-                    className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors ${(idx === 0 ? isOn : isOn2) ? "bg-green-500" : "bg-gray-300"
-                      }`}
+                    onClick={() => idx == 0 ? toggleRelay(1) : toggleRelay(2)}
+                    className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors ${(idx == 0 ? relay1 : relay2) ? "bg-green-500" : "bg-gray-400"}`}
                   >
                     <span
-                      className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${(idx === 0 ? isOn : isOn2) ? "translate-x-5" : "translate-x-1"
-                        }`}
+                      className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${(idx == 0 ? relay1 : relay2) ? "translate-x-5" : "translate-x-1"}`}
                     ></span>
                   </button>
 
@@ -229,7 +254,7 @@ export default function Home() {
                   ))}
                 </select>
               </div>
-              <Grafik />
+              <Grafik data={data}/>
             </div>
           </div>
         </div>
@@ -237,3 +262,7 @@ export default function Home() {
     </>
   );
 }
+function setData(result: any) {
+  throw new Error("Function not implemented.");
+}
+

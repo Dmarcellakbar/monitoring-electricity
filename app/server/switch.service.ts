@@ -7,6 +7,7 @@ const API_URL = 'http://165.154.208.223:8070/switchpower';
 const API_URL_2 = 'http://165.154.208.223:8070/switchchangevalue';
 
 
+
 export const postSwitchPower = async (name: any, value: any, id: any) => {
     try {
         const response = await axios.post(API_URL, {
@@ -32,6 +33,17 @@ export const postValueSwitchPower = async (name: any, value: any, id: any) => {
         return response.data;
     } catch (error) {
         console.error('Error posting data:', error);
+        throw error;
+    }
+};
+
+
+export const getHistoricalData = async (type: string) => {
+    try {
+        const response = await axios.get(`http://165.154.208.223:8070/data-history?params=${encodeURIComponent(type)}`);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching historical data:', error);
         throw error;
     }
 };

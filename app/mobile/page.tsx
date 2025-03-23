@@ -1,21 +1,25 @@
 /* eslint-disable */
 
 'use client';
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import mqtt from "mqtt";
 import useSubscription from "../server/mqtt";
-import { postSwitchPower, postValueSwitchPower } from "../server/switch.service";
+import { getHistoricalData } from "../server/switch.service";
+import Grafik from "../components/grafik";
 
-const page = () => {
+const MQTT_BROKER = "ws://165.154.208.223:8083/mqtt"; // Change to your MQTT broker's WebSocket URL
+const MQTT_TOPIC1 = "esp32/relay1";
+const MQTT_TOPIC2 = "esp32/relay2";
+
+export default function Home() {
   const [dateTime, setDateTime] = useState("");
   const [theme, setTheme] = useState("light");
-  const dataMqtt: any = useSubscription({ topic: "/realtime" });
-  const [isOn, setIsOn] = useState(false);
-  const [isOn2, setIsOn2] = useState(false);
-  const [alert, setAlert] = useState<any>(null);
-  const [selectEdit, setSelectEdit] = useState({ index: 0, status: true })
-  const [valStd, setValStd] = useState(null)
 
-  // console.log(',dataMqtt', dataMqtt)
+  const [relay1, setRelay1] = useState(false);
+  const [relay2, setRelay2] = useState(false);
+  const dataMqtt: any = useSubscription({ topic: "/realtime" });
+  const toggleTheme = () => setTheme(theme === "light" ? "dark" : "light");
+
   const [labels, _s] = useState([{
     name: "SAKLAR 1",
     code: "sensor_1",
@@ -24,6 +28,28 @@ const page = () => {
     name: "SAKLAR 2",
     code: "sensor_2",
   }]);
+
+  const client = mqtt.connect(MQTT_BROKER);
+
+  client.on("connect", () => {
+    console.log("Connected to MQTT broker");
+  });
+
+  const [selected, setSelected] = useState("daily");
+  const options = ["daily", "weekly", "monthly"];
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+
+  const toggleRelay = (relay: number) => {
+    const topic = relay === 1 ? MQTT_TOPIC1 : MQTT_TOPIC2;
+    const newState = relay === 1 ? !relay1 : !relay2;
+    client.publish(topic, newState ? "ON" : "OFF");
+    if (relay === 1) setRelay1(newState);
+    else setRelay2(newState);
+  };
+
 
   useEffect(() => {
     const updateDateTime = () => {
@@ -42,58 +68,24 @@ const page = () => {
     document.body.className = theme === "dark" ? "dark" : "light";
   }, [theme]);
 
-  const toggleTheme = () => setTheme(theme === "light" ? "dark" : "light");
-
-
-
-  const toggleSwitch = () => {
-    const sts = dataMqtt?.message?.md_electric?.[0]?.id
-    setIsOn(!isOn);
-    try {
-      postSwitchPower("sensor_1", !isOn, sts);
-    } catch (error) {
-      console.log(error)
-    } finally {
-      setAlert({ message: `Saklar 1 aktif`, type: "success" });
-      setTimeout(() => setAlert(null), 3000);
-    }
-  };
-
-  const toggleSwitch2 = () => {
-    const sts = dataMqtt?.message?.md_electric?.[1]?.id
-    setIsOn2(!isOn2);
-    try {
-      postSwitchPower("sensor_2", !isOn2, sts);
-    } catch (error) {
-      console.log(error)
-    } finally {
-      setAlert({ message: `Saklar 2 aktif`, type: "success" });
-      setTimeout(() => setAlert(null), 3000);
-    }
-  };
-
-
-    const handleEdit = (idx: number, status: boolean, valSensor: any) => {
-      setSelectEdit({ index: idx, status: status })
-      const sts = dataMqtt?.message?.md_electric?.[idx]?.id
-  
-      if (status == true) {
-        try {
-          postValueSwitchPower("", !!valStd ? valStd : valSensor, sts)
-        } catch (error) {
-          console.log(error)
-        } finally {
-          setValStd(null)
-          setAlert({ message: `Value alarm saved`, type: "success" });
-          setTimeout(() => setAlert(null), 3000);
-        }
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const result = await getHistoricalData(selected);
+        setData(result);
+      } catch (err) {
+        setError("Failed to fetch data");
+      } finally {
+        setLoading(false);
       }
     };
-  
+
+    fetchData();
+  }, [selected]);
 
   return (
-    <>
-      <header className="fixed top-0 w-full bg-white dark:bg-slate-800 p-4 border-b-2 border-black dark:border-white z-10">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-white dark:bg-gray-700 p-4">
+      <header className="fixed top-0 w-full bg-white dark:bg-gray-700 p-4 border-b-2 border-black dark:border-white z-10">
         <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">
             Dashboard Monitoring Energy
@@ -109,22 +101,22 @@ const page = () => {
           </div>
         </div>
       </header>
-      <div>{'..'}</div>
-      <main className="pt-20 px-4 bg-white dark:bg-slate-800" style={{ height: '110dvh' }}>
+
+      <div className="w-full mt-20">
         {labels?.map(l => {
           return (
-            <div key={l?.code} className="mt-3">
-              <h2 className="font-bold text-xl dark:text-white">{l?.name}</h2>
+            <div key={l?.code} className="mt-3 bg-gray-100 dark:bg-gray-600 w-full p-4 rounded-lg">
+              <h2 className="font-bold text-xl text-green-500">{l?.name}</h2>
               <div className="flex gap-2 justify-between">
-                <div className="bg-cyan-300 p-3 rounded-lg" style={{ width: '100%', height: '10dvh' }}>
+                <div className="bg-gray-300 dark:bg-gray-500 dark:text-white p-3 rounded-lg" style={{ width: '100%', height: '10dvh' }}>
                   <div className="font-bold text-md">Power</div>
                   <div className="text-lg">{dataMqtt?.message?.[l?.code]?.power ?? 0} W</div>
                 </div>
-                <div className="bg-yellow-300  p-3 rounded-lg" style={{ width: '100%', height: '10dvh' }}>
+                <div className="bg-gray-300 dark:bg-gray-500 dark:text-white  p-3 rounded-lg" style={{ width: '100%', height: '10dvh' }}>
                   <div className="font-bold text-md">Voltage</div>
                   <div className="text-lg">{dataMqtt?.message?.[l?.code]?.voltage ?? 0} V</div>
                 </div>
-                <div className="bg-green-300  p-3 rounded-lg" style={{ width: '100%', height: '10dvh' }}>
+                <div className="bg-gray-300 dark:bg-gray-500 dark:text-white p-3 rounded-lg" style={{ width: '100%', height: '10dvh' }}>
                   <div className="font-bold text-md">Current</div>
                   <div className="text-lg">{dataMqtt?.message?.[l?.code]?.current ?? 0} A</div>
                 </div>
@@ -132,66 +124,55 @@ const page = () => {
             </div>
           )
         })}
-        <div className="mt-3 border-slate-800 dark:border-white border-2 rounded-lg p-2">
-          <h2 className="font-bold text-xl dark:text-white text-center">CONTROL</h2>
-          {labels?.map((l, idx) => {
-            const valSensor = dataMqtt?.message?.md_electric[idx]?.std_sensor ?? 0
+      </div>
 
-            return (
-              <div key={l?.code} className="mt-3">
-                <span className="font-bold text-lg dark:text-white">{l?.name}</span>
-                <div className="flex gap-3 align-middle items-center justify-between">
-                <button
-                  onClick={idx === 0 ? toggleSwitch : toggleSwitch2}
-                  className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors ${(idx === 0 ? isOn : isOn2) ? "bg-green-500" : "bg-gray-300"
-                    }`}
-                >
-                  <span
-                    className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${(idx === 0 ? isOn : isOn2) ? "translate-x-5" : "translate-x-1"
-                      }`}
-                  ></span>
-                </button>
-                <div className="flex flex-col">
-                    <label htmlFor="" className="dark:text-white">Value Alarm : </label>
-                    <input
-                      defaultValue={valSensor}
-                      disabled={selectEdit?.index == idx ? selectEdit?.status : true}
-                      type="text"
-                      className="border-b-2 p-1 dark:text-white w-20"
-                      onChange={(e: any) => {
-                        const newValue = e.target.value;
-                        setValStd(newValue)
-                      }}
-                      style={{
-                        background: selectEdit?.index == idx && selectEdit?.status == false ? 'white' : 'gray',
-                        border: '1px solid black',
-                        borderRadius: '1dvh'
-                      }}
-                    />
-                  </div>
-                  {selectEdit?.index == idx && selectEdit?.status == false ?
-                    <button
-                      className="bg-blue-400 px-3 py-1 rounded-lg text-white"
-                      onClick={() => handleEdit(idx, true, valSensor)}
-                    >
-                      Save
-                    </button> :
-                    <button
-                      className="bg-yellow-500 px-3 py-1 rounded-lg text-white"
-                      onClick={() => handleEdit(idx, false, valSensor)}
-                    >
-                      Edit
-                    </button>
-                  }
-                </div>
-
-              </div>
-            )
-          })}
+      <div className="mt-4 bg-gray-100 dark:bg-gray-600 w-full p-8 rounded-lg">
+        <div className="flex items-center justify-between w-full max-w-sm bg-gray-200 dark:bg-gray-500 shadow-lg rounded-lg p-6">
+          <p className="text-xl font-bold text-green-500">Saklar 1: {relay1 ? "Aktif" : "Mati"}</p>
+          <button
+            onClick={() => toggleRelay(1)}
+            className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors ${relay1 ? "bg-green-500" : "bg-gray-400"}`}
+          >
+            <span
+              className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${relay1 ? "translate-x-5" : "translate-x-1"}`}
+            ></span>
+          </button>
         </div>
-      </main>
-    </>
-  )
-}
 
-export default page
+        <div className="flex mt-4 items-center justify-between w-full max-w-sm bg-gray-200 dark:bg-gray-500 shadow-lg rounded-lg p-6">
+          <p className="text-xl font-bold text-green-500">Saklar 2: {relay2 ? "Aktif" : "Mati"}</p>
+          <button
+            onClick={() => toggleRelay(2)}
+            className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors ${relay2 ? "bg-green-500" : "bg-gray-400"}`}
+          >
+            <span
+              className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${relay2 ? "translate-x-5" : "translate-x-1"}`}
+            ></span>
+          </button>
+        </div>
+      </div>
+      {/* HISTORICAL GRAPH */}
+      <div className="mt-8 w-full bg-gray-100 dark:bg-gray-600 p-2 rounded-lg">
+        <h2 className="font-bold text-xl dark:text-white text-center">Historical</h2>
+        <div className="flex gap-3 mt-2">
+          <div className="font-bold text-lg dark:text-white text-left">Filter :</div>
+          <select
+            className="p-2 border rounded-lg focus:ring focus:ring-blue-300 bg-gray-100 text-black dark:bg-gray-600 dark:text-white"
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+          >
+            {options.map((option, index) => (
+              <option key={index} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+        <Grafik data={data} />
+      </div>
+      <div className="mt-4 text-black dark:text-white">
+        Powered by HARD IoT
+      </div>
+    </div>
+  );
+}
