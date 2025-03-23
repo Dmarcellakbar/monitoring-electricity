@@ -35,8 +35,8 @@ export default function Home() {
     console.log("Connected to MQTT broker");
   });
 
-  const [selected, setSelected] = useState("daily");
-  const options = ["daily", "weekly", "monthly"];
+  const [selected, setSelected] = useState("minute");
+  const options = ["minute", "hour", "daily", "weekly", "monthly"];
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

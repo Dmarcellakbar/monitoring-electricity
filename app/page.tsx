@@ -25,8 +25,8 @@ export default function Home() {
   const dataMqtt: any = useSubscription({ topic: "/realtime" });
   const [selectEdit, setSelectEdit] = useState({ index: 0, status: true })
   const [valStd, setValStd] = useState(null)
-  const [selected, setSelected] = useState("daily");
-  const options = ["daily", "weekly", "monthly"];
+  const [selected, setSelected] = useState("minute");
+  const options = ["minute", "hour", "daily", "weekly", "monthly"];
   const [relay1, setRelay1] = useState(false);
   const [relay2, setRelay2] = useState(false);
 
