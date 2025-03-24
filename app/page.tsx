@@ -33,18 +33,47 @@ export default function Home() {
   const [isOn, setIsOn] = useState(false);
   const [isOn2, setIsOn2] = useState(false);
 
-  const client = mqtt.connect(MQTT_BROKER);
+  const [client, setClient] = useState<mqtt.MqttClient | null>(null);
   
-  client.on("connect", () => {
-    console.log("Connected to MQTT broker");
-  });
+    useEffect(() => {
+      const mqttClient = mqtt.connect(MQTT_BROKER, {
+        reconnectPeriod: 5000, // Coba reconnect setiap 5 detik
+        keepalive: 60, // Kirim sinyal tiap 60 detik agar koneksi tetap hidup
+        will: {
+          topic: "esp32/status",
+          payload: "offline",
+          qos: 1,
+          retain: true,
+        },
+      });
+  
+      mqttClient.on("connect", () => {
+        console.log("Connected to MQTT broker");
+      });
+  
+      mqttClient.on("error", (err) => {
+        console.error("MQTT Error:", err);
+        mqttClient.end();
+      });
+  
+      mqttClient.on("offline", () => {
+        console.warn("MQTT Broker offline, mencoba reconnect...");
+        setTimeout(() => mqttClient.reconnect(), 5000);
+      });
+  
+      setClient(mqttClient);
+  
+      return () => {
+        mqttClient.end(); // Bersihkan koneksi saat komponen di-unmount
+      };
+    }, []);
 
 
 
   const toggleRelay = (relay: number) => {
     const topic = relay === 1 ? MQTT_TOPIC1 : MQTT_TOPIC2;
     const newState = relay === 1 ? !relay1 : !relay2;
-    client.publish(topic, newState ? "ON" : "OFF");
+    client?.publish(topic, newState ? "ON" : "OFF");
     if (relay === 1) setRelay1(newState);
     else setRelay2(newState);
   };
@@ -176,7 +205,7 @@ export default function Home() {
               <div key={sensor} className="text-center grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                 <div>
                   <h2 className="font-bold text-xl dark:text-white mt-4">SAKLAR {index + 1} (DAYA)</h2>
-                  <Gauge value={dataMqtt?.message?.[sensor]?.power} max={5000} metric={"W"} />
+                  <Gauge value={dataMqtt?.message?.[sensor]?.power} max={700} metric={"W"} />
                 </div>
                 <div>
                   <h2 className="font-bold text-xl dark:text-white mt-4">SAKLAR {index + 1} (AMPERE)</h2>
@@ -316,7 +345,3 @@ export default function Home() {
     </>
   );
 }
-function setData(result: any) {
-  throw new Error("Function not implemented.");
-}
-
