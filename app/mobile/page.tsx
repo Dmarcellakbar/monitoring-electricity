@@ -1,7 +1,7 @@
 /* eslint-disable */
 
 'use client';
-import { useEffect, useState } from "react";
+import { JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, useEffect, useState } from "react";
 import mqtt from "mqtt";
 import useSubscription from "../server/mqtt";
 import { getHistoricalData } from "../server/switch.service";
@@ -35,12 +35,26 @@ export default function Home() {
     console.log("Connected to MQTT broker");
   });
 
-  const [selected, setSelected] = useState("minute");
-  const options = ["minute", "hour", "daily", "weekly", "monthly"];
+  const [selected, setSelected] = useState("hour");
+  const options = ["hour", "daily", "weekly", "monthly"];
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+
+  const ITEMS_PER_PAGE = 10;
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.ceil(data?.xAxis?.length / ITEMS_PER_PAGE);
+
+  const currentData = data?.xAxis?.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  ).map((_: any, index: number) => ({
+    xAxis: data?.xAxis[(currentPage - 1) * ITEMS_PER_PAGE + index],
+    power_1: data?.power_1[(currentPage - 1) * ITEMS_PER_PAGE + index],
+    power_2: data?.power_2[(currentPage - 1) * ITEMS_PER_PAGE + index],
+  })) ?? []
 
   const toggleRelay = (relay: number) => {
     const topic = relay === 1 ? MQTT_TOPIC1 : MQTT_TOPIC2;
@@ -159,7 +173,10 @@ export default function Home() {
           <select
             className="p-2 border rounded-lg focus:ring focus:ring-blue-300 bg-gray-100 text-black dark:bg-gray-600 dark:text-white"
             value={selected}
-            onChange={(e) => setSelected(e.target.value)}
+            onChange={(e) => {
+              setSelected(e.target.value)
+              setCurrentPage(1)
+            }}
           >
             {options.map((option, index) => (
               <option key={index} value={option}>
@@ -169,6 +186,45 @@ export default function Home() {
           </select>
         </div>
         <Grafik data={data} />
+        <div>
+          <div className="p-4 w-full max-w-3xl mx-auto">
+            <table className="w-full border-collapse border border-gray-300">
+              <thead>
+                <tr className="bg-gray-200">
+                  <th className="border border-gray-300 p-2">X Axis</th>
+                  <th className="border border-gray-300 p-2">Power 1</th>
+                  <th className="border border-gray-300 p-2">Power 2</th>
+                </tr>
+              </thead>
+              <tbody>
+              {currentData.map((row: any, index: number) => (
+                  <tr key={index} className="odd:bg-white even:bg-gray-100">
+                    <td className="border border-gray-300 p-2 text-center">{row?.xAxis}</td>
+                    <td className="border border-gray-300 p-2 text-center">{row?.power_1}</td>
+                    <td className="border border-gray-300 p-2 text-center">{row?.power_2}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="flex justify-between items-center mt-4">
+              <button
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 bg-blue-500 text-white rounded disabled:bg-gray-300"
+              >
+                Previous
+              </button>
+              <span>Page {currentPage} of {totalPages}</span>
+              <button
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 bg-blue-500 text-white rounded disabled:bg-gray-300"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       <div className="mt-4 text-black dark:text-white">
         Powered by HARD IoT
