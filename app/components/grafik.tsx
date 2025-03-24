@@ -40,9 +40,9 @@ export default function Grafik({ data }: { data: ChartData }) {
       data: xAxisData,
       axisLabel: { 
         color: "#1EC997", 
-        fontSize: xAxisData.length > 20 ? 5 : 10,
+        fontSize: xAxisData.length > 5 ? 5 : 10,
         interval: 0, // Tampilkan semua label
-        rotate: xAxisData.length > 20 ? 60 : 0 // Putar jika terlalu banyak label
+        rotate: xAxisData.length > 5 ? 60 : 0 // Putar jika terlalu banyak label
       },
     },
     yAxis: {

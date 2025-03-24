@@ -1,11 +1,13 @@
 /* eslint-disable */
 
 'use client';
-import { JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import mqtt from "mqtt";
 import useSubscription from "../server/mqtt";
-import { getHistoricalData } from "../server/switch.service";
+import { getHistoricalData, postValueSwitchPower } from "../server/switch.service";
 import Grafik from "../components/grafik";
+import AlertNotification from "../components/toast";
+import AlertDangerNotification from "../components/toast-danger";
 
 const MQTT_BROKER = "ws://165.154.208.223:8083/mqtt"; // Change to your MQTT broker's WebSocket URL
 const MQTT_TOPIC1 = "esp32/relay1";
@@ -14,11 +16,17 @@ const MQTT_TOPIC2 = "esp32/relay2";
 export default function Home() {
   const [dateTime, setDateTime] = useState("");
   const [theme, setTheme] = useState("light");
+  const [alertDanger, setAlertDanger] = useState<any>(null);
+  const [alert, setAlert] = useState<any>(null);
 
   const [relay1, setRelay1] = useState(false);
   const [relay2, setRelay2] = useState(false);
   const dataMqtt: any = useSubscription({ topic: "/realtime" });
   const toggleTheme = () => setTheme(theme === "light" ? "dark" : "light");
+
+  const [selectEdit, setSelectEdit] = useState({ index: 0, status: true })
+  const [valStd, setValStd] = useState(null)
+
 
   const [labels, _s] = useState([{
     name: "SAKLAR 1",
@@ -29,11 +37,41 @@ export default function Home() {
     code: "sensor_2",
   }]);
 
-  const client = mqtt.connect(MQTT_BROKER);
+  const [client, setClient] = useState<mqtt.MqttClient | null>(null);
 
-  client.on("connect", () => {
-    console.log("Connected to MQTT broker");
-  });
+  useEffect(() => {
+    const mqttClient = mqtt.connect(MQTT_BROKER, {
+      reconnectPeriod: 5000, // Coba reconnect setiap 5 detik
+      keepalive: 60, // Kirim sinyal tiap 60 detik agar koneksi tetap hidup
+      will: {
+        topic: "esp32/status",
+        payload: "offline",
+        qos: 1,
+        retain: true,
+      },
+    });
+
+    mqttClient.on("connect", () => {
+      console.log("Connected to MQTT broker");
+    });
+
+    mqttClient.on("error", (err) => {
+      console.error("MQTT Error:", err);
+      mqttClient.end();
+    });
+
+    mqttClient.on("offline", () => {
+      console.warn("MQTT Broker offline, mencoba reconnect...");
+      setTimeout(() => mqttClient.reconnect(), 5000);
+    });
+
+    setClient(mqttClient);
+
+    return () => {
+      mqttClient.end(); // Bersihkan koneksi saat komponen di-unmount
+    };
+  }, []);
+
 
   const [selected, setSelected] = useState("hour");
   const options = ["hour", "daily", "weekly", "monthly"];
@@ -59,7 +97,7 @@ export default function Home() {
   const toggleRelay = (relay: number) => {
     const topic = relay === 1 ? MQTT_TOPIC1 : MQTT_TOPIC2;
     const newState = relay === 1 ? !relay1 : !relay2;
-    client.publish(topic, newState ? "ON" : "OFF");
+    client?.publish(topic, newState ? "ON" : "OFF");
     if (relay === 1) setRelay1(newState);
     else setRelay2(newState);
   };
@@ -97,6 +135,35 @@ export default function Home() {
     fetchData();
   }, [selected]);
 
+  const handleEdit = (idx: number, status: boolean) => {
+    setSelectEdit({ index: idx, status: status })
+    const sts = dataMqtt?.message?.md_electric?.[idx]?.id
+
+    if (status == true) {
+      try {
+        postValueSwitchPower("", !!valStd ? valStd : dataMqtt?.message?.md_electric?.[idx]?.std_sensor, sts)
+      } catch (error) {
+        console.log(error)
+      } finally {
+        setValStd(null)
+        setAlert({ message: `Value alarm saved`, type: "success" });
+        setTimeout(() => setAlert(null), 3000);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (dataMqtt?.message?.alert_notif) {
+      triggerAlert();
+    }
+  }, [dataMqtt?.message?.alert_notif]); // Use specific value to reduce re-renders
+
+  const triggerAlert = () => {
+    setAlertDanger({ message: "WARNING DAYA MELEBIHI BATAS, MOHON MATIKAN SAKLAR", type: "error" });
+    setTimeout(() => setAlertDanger(null), 10000); // Uncomment if you want auto-dismiss
+  };
+
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-white dark:bg-gray-700 p-4">
       <header className="fixed top-0 w-full bg-white dark:bg-gray-700 p-4 border-b-2 border-black dark:border-white z-10">
@@ -115,6 +182,10 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {alert && <AlertNotification message={alert.message} type={alert.type} />}
+      {alertDanger && <AlertDangerNotification message={alertDanger.message} type={alertDanger.type} />}
+
 
       <div className="w-full mt-20">
         {labels?.map(l => {
@@ -140,21 +211,56 @@ export default function Home() {
         })}
       </div>
 
-      <div className="mt-4 bg-gray-100 dark:bg-gray-600 w-full p-8 rounded-lg">
-        <div className="flex items-center justify-between w-full max-w-sm bg-gray-200 dark:bg-gray-500 shadow-lg rounded-lg p-6">
-          <p className="text-xl font-bold text-green-500">Saklar 1: {relay1 ? "Aktif" : "Mati"}</p>
-          <button
-            onClick={() => toggleRelay(1)}
-            className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors ${relay1 ? "bg-green-500" : "bg-gray-400"}`}
-          >
-            <span
-              className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${relay1 ? "translate-x-5" : "translate-x-1"}`}
-            ></span>
-          </button>
+      <div className="mt-4 bg-gray-100 dark:bg-gray-600 w-full p-3 rounded-lg">
+        <div className="flex align-middle items-center justify-between w-full max-w-sm bg-gray-200 dark:bg-gray-500 shadow-lg rounded-lg p-6 gap-3">
+          <div>
+            <p className="text-lg font-bold text-green-500">Saklar 1: {relay1 ? "Aktif" : "Mati"}</p>
+            <button
+              onClick={() => toggleRelay(1)}
+              className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors ${relay1 ? "bg-green-500" : "bg-gray-400"}`}
+            >
+              <span
+                className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${relay1 ? "translate-x-5" : "translate-x-1"}`}
+              ></span>
+            </button>
+          </div>
+          <div className="flex flex-col">
+            <label htmlFor="">Alarm: </label>
+            <input
+              defaultValue={dataMqtt?.message?.md_electric?.[0]?.std_sensor}
+              disabled={selectEdit?.index == 0 ? selectEdit?.status : true}
+              type="text"
+              className="border-b-2 p-1 dark:text-black w-20"
+              onChange={(e: any) => {
+                const newValue = e.target.value;
+                setValStd(newValue)
+              }}
+              style={{
+                background: selectEdit?.index == 0 && selectEdit?.status == false ? 'white' : 'gray',
+                border: '1px solid black',
+                borderRadius: '1dvh'
+              }}
+            />
+          </div>
+          {selectEdit?.index == 0 && selectEdit?.status == false ?
+            <button
+              className="bg-blue-400 px-3 py-1 rounded-lg text-white"
+              onClick={() => handleEdit(0, true)}
+            >
+              Save
+            </button> :
+            <button
+              className="bg-yellow-500 px-3 py-1 rounded-lg text-white"
+              onClick={() => handleEdit(0, false)}
+            >
+              Edit
+            </button>
+          }
         </div>
 
-        <div className="flex mt-4 items-center justify-between w-full max-w-sm bg-gray-200 dark:bg-gray-500 shadow-lg rounded-lg p-6">
-          <p className="text-xl font-bold text-green-500">Saklar 2: {relay2 ? "Aktif" : "Mati"}</p>
+        <div className="flex mt-4 items-center justify-between w-full max-w-sm bg-gray-200 dark:bg-gray-500 shadow-lg rounded-lg p-6 gap-3">
+         <div>
+         <p className="text-lg font-bold text-green-500">Saklar 2: {relay2 ? "Aktif" : "Mati"}</p>
           <button
             onClick={() => toggleRelay(2)}
             className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors ${relay2 ? "bg-green-500" : "bg-gray-400"}`}
@@ -163,6 +269,40 @@ export default function Home() {
               className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${relay2 ? "translate-x-5" : "translate-x-1"}`}
             ></span>
           </button>
+         </div>
+
+          <div className="flex flex-col">
+            <label htmlFor="">Alarm: </label>
+            <input
+              defaultValue={dataMqtt?.message?.md_electric?.[1]?.std_sensor}
+              disabled={selectEdit?.index == 1 ? selectEdit?.status : true}
+              type="text"
+              className="border-b-2 p-1 dark:text-black w-20"
+              onChange={(e: any) => {
+                const newValue = e.target.value;
+                setValStd(newValue)
+              }}
+              style={{
+                background: selectEdit?.index == 1 && selectEdit?.status == false ? 'white' : 'gray',
+                border: '1px solid black',
+                borderRadius: '1dvh'
+              }}
+            />
+          </div>
+          {selectEdit?.index == 1 && selectEdit?.status == false ?
+            <button
+              className="bg-blue-400 px-3 py-1 rounded-lg text-white"
+              onClick={() => handleEdit(1, true)}
+            >
+              Save
+            </button> :
+            <button
+              className="bg-yellow-500 px-3 py-1 rounded-lg text-white"
+              onClick={() => handleEdit(1, false)}
+            >
+              Edit
+            </button>
+          }
         </div>
       </div>
       {/* HISTORICAL GRAPH */}
@@ -197,7 +337,7 @@ export default function Home() {
                 </tr>
               </thead>
               <tbody>
-              {currentData.map((row: any, index: number) => (
+                {currentData.map((row: any, index: number) => (
                   <tr key={index} className="odd:bg-white even:bg-gray-100">
                     <td className="border border-gray-300 p-2 text-center">{row?.xAxis}</td>
                     <td className="border border-gray-300 p-2 text-center">{row?.power_1}</td>

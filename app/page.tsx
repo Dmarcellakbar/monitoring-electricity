@@ -162,9 +162,6 @@ export default function Home() {
           >
             {theme === "light" ? "🌙" : "☀️"}
           </button>
-          {/* <button onClick={triggerAlert} className="px-6 py-2 bg-blue-500 text-white rounded-lg">
-            Show Alert
-          </button> */}
         </div>
       </header>
 
@@ -213,7 +210,7 @@ export default function Home() {
                     ></span>
                   </button>
 
-                  <span className="ml-2 text-lg dark:text-white">{(idx === 0 ? isOn : isOn2) ? "ON" : "OFF"}</span>
+                  <span className="ml-2 text-lg dark:text-white">{(idx == 0 ? relay1 : relay2) ? "Aktif" : "Mati"}</span>
 
                   <div className="flex flex-col">
                     <label htmlFor="">Value Alarm : </label>
