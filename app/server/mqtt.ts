@@ -4,7 +4,7 @@ import mqtt from "mqtt";
 export default function useSubscription({ topic }: { topic: string }) {
   const [message, setMessage] = useState<string | null>(null);
   const [client, setClient] = useState<mqtt.MqttClient | null>(null);
-  const brokerUrl = "ws://165.154.208.223:8083/mqtt"; // Gunakan ws jika tidak menggunakan SSL
+  const brokerUrl = "wss://mqtt.hardiot.my.id/mqtt"; // Gunakan ws jika tidak menggunakan SSL
 
   useEffect(() => {
     const mqttClient = mqtt.connect(brokerUrl);

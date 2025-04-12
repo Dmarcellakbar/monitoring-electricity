@@ -10,7 +10,7 @@ import { getHistoricalData, postValueSwitchPower } from "./server/switch.service
 import AlertDangerNotification from "./components/toast-danger";
 import mqtt from "mqtt";
 
-const MQTT_BROKER = "ws://165.154.208.223:8083/mqtt"; // Change to your MQTT broker's WebSocket URL
+const MQTT_BROKER = "wss://mqtt.hardiot.my.id/mqtt"; // Change to your MQTT broker's WebSocket URL
 const MQTT_TOPIC1 = "esp32/relay1";
 const MQTT_TOPIC2 = "esp32/relay2";
 
@@ -209,7 +209,7 @@ export default function Home() {
                 </div>
                 <div>
                   <h2 className="font-bold text-xl dark:text-white mt-4">SAKLAR {index + 1} (AMPERE)</h2>
-                  <Gauge value={dataMqtt?.message?.[sensor]?.current} max={200} metric={"A"} />
+                  <Gauge value={dataMqtt?.message?.[sensor]?.current} max={100} metric={"A"} />
                 </div>
                 <div>
                   <h2 className="font-bold text-xl dark:text-white mt-4">SAKLAR {index + 1} (VOLTAGE)</h2>

@@ -9,7 +9,7 @@ import Grafik from "../components/grafik";
 import AlertNotification from "../components/toast";
 import AlertDangerNotification from "../components/toast-danger";
 
-const MQTT_BROKER = "ws://165.154.208.223:8083/mqtt"; // Change to your MQTT broker's WebSocket URL
+const MQTT_BROKER = "wss://mqtt.hardiot.my.id/mqtt"; // Change to your MQTT broker's WebSocket URL
 const MQTT_TOPIC1 = "esp32/relay1";
 const MQTT_TOPIC2 = "esp32/relay2";
 
